@@ -1,0 +1,506 @@
+
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <meta name="description" content="Administración de pedidos de Everything Goes Together">
+  <title>Mis pedidos · Everything Goes Together ♡</title>
+
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+
+  <style>
+    * {
+      box-sizing: border-box;
+    }
+
+    body {
+      margin: 0;
+      padding: 20px;
+      background: #fffaf8;
+      color: #55434a;
+      font-family: Georgia, serif;
+    }
+
+    header {
+      text-align: center;
+      padding: 30px 15px;
+      background: #f8e8ee;
+      border-bottom: 1px solid #ecd5dd;
+    }
+
+    h1, h2, h3 {
+      color: #a9637b;
+      font-weight: normal;
+    }
+
+    main {
+      max-width: 850px;
+      margin: 30px auto;
+    }
+
+    .panel {
+      background: white;
+      border: 1px solid #ecd5dd;
+      padding: 25px;
+      margin-bottom: 25px;
+    }
+
+    button {
+      padding: 12px 20px;
+      margin: 10px 5px 15px 0;
+      border: 1px solid #d99caf;
+      background: #a9637b;
+      color: white;
+      cursor: pointer;
+      font-family: inherit;
+    }
+
+    button:hover {
+      opacity: 0.85;
+    }
+
+    .back {
+      background: transparent;
+      color: #a9637b;
+    }
+
+    .order-card {
+      border-top: 1px solid #ecd5dd;
+      padding: 22px 0;
+    }
+
+    .order-card p {
+      line-height: 1.6;
+      overflow-wrap: anywhere;
+    }
+
+    .order-card pre {
+      white-space: pre-wrap;
+      overflow-wrap: anywhere;
+      font-family: Georgia, serif;
+      line-height: 1.6;
+    }
+
+    .status-label {
+      display: block;
+      margin: 15px 0 8px;
+      color: #a9637b;
+      font-weight: bold;
+    }
+
+    select {
+      width: 100%;
+      max-width: 300px;
+      padding: 12px;
+      border: 1px solid #e5cbd4;
+      background: #fffafc;
+      color: #55434a;
+      font-family: inherit;
+    }
+
+    #status {
+      color: #a9637b;
+      margin-top: 15px;
+    }
+
+    .empty {
+      text-align: center;
+      padding: 30px;
+    }
+
+    .total {
+      font-weight: bold;
+      color: #a9637b;
+    }
+
+    @media (max-width: 600px) {
+      body {
+        padding: 10px;
+      }
+
+      .panel {
+        padding: 17px;
+      }
+    }
+  </style>
+</head>
+
+<body>
+
+<header>
+  <h1>Everything Goes Together ♡</h1>
+  <p>Administración de pedidos 🎀</p>
+</header>
+
+<main>
+
+  <button class="back" onclick="location.href='dashboard.html'">
+    ← Volver al panel
+  </button>
+
+  <button onclick="loadOrders()">
+    ↻ Actualizar pedidos
+  </button>
+
+  <section class="panel">
+
+    <h2>♡ Pedidos recibidos</h2>
+
+    <p>
+      Aquí puedes revisar las compras de tus clientes,
+      sus datos de envío y actualizar el estado de cada pedido.
+    </p>
+
+    <p id="status">Conectando con la tienda... ♡</p>
+
+    <div id="order-list"></div>
+
+  </section>
+
+</main>
+
+<script>
+
+  // CONEXIÓN CON SUPABASE
+
+  const SUPABASE_URL =
+    "https://dmjvqxeztamhvmqkvjph.supabase.co";
+
+  const SUPABASE_KEY =
+    "sb_publishable_0NB-qGXqy51VG1IzKk_H8Q_dbpt8ogM";
+
+  const supabaseClient = window.supabase.createClient(
+    SUPABASE_URL,
+    SUPABASE_KEY
+  );
+
+
+  // COMPROBAR ACCESO
+
+  async function checkAccess() {
+
+    const { data, error } =
+      await supabaseClient.auth.getUser();
+
+    if (error || !data.user) {
+      location.href = "admin.html";
+      return false;
+    }
+
+    return true;
+  }
+
+
+  // FORMATEAR PRECIOS
+
+  function formatPrice(price) {
+
+    return Number(price || 0).toLocaleString("es-CL");
+
+  }
+
+
+  // MOSTRAR PRODUCTOS DEL PEDIDO
+
+  function showProducts(products) {
+
+    if (Array.isArray(products)) {
+
+      return products.map(product => {
+
+        if (typeof product === "string") {
+          return product;
+        }
+
+        const name =
+          product.nombre ||
+          product.name ||
+          product.title ||
+          "Producto";
+
+        const quantity =
+          product.cantidad ??
+          product.quantity ??
+          product.qty ??
+          1;
+
+        const price =
+          product.precio ??
+          product.price;
+
+        let line = `${name} × ${quantity}`;
+
+        if (price !== undefined) {
+          line += ` — $${formatPrice(price)}`;
+        }
+
+        return line;
+
+      }).join("\n");
+
+    }
+
+    if (products && typeof products === "object") {
+      return JSON.stringify(products, null, 2);
+    }
+
+    return String(products || "Sin información de productos");
+
+  }
+
+
+  // CARGAR PEDIDOS
+
+  async function loadOrders() {
+
+    const container =
+      document.getElementById("order-list");
+
+    const status =
+      document.getElementById("status");
+
+    container.innerHTML = "";
+
+    status.textContent = "Cargando pedidos... ♡";
+
+    try {
+
+      const { data, error } = await supabaseClient
+        .from("Orders")
+        .select("*")
+        .order("created_at", { ascending: false });
+
+      if (error) {
+        throw error;
+      }
+
+      if (!data || data.length === 0) {
+
+        status.textContent = "";
+
+        container.innerHTML =
+          '<p class="empty">Todavía no tienes pedidos. ♡</p>';
+
+        return;
+      }
+
+      status.textContent =
+        `Tienes ${data.length} pedido(s). ♡`;
+
+
+      // CREAR TARJETAS
+
+      data.forEach(order => {
+
+        const card = document.createElement("article");
+
+        card.className = "order-card";
+
+
+        // NÚMERO DEL PEDIDO
+
+        const title = document.createElement("h3");
+
+        title.textContent = `Pedido #${order.id}`;
+
+        card.appendChild(title);
+
+
+        // FECHA
+
+        const date = document.createElement("p");
+
+        date.textContent =
+          "Fecha: " +
+          new Date(order.created_at).toLocaleString("es-CL");
+
+        card.appendChild(date);
+
+
+        // DATOS DEL CLIENTE
+
+        const customer = document.createElement("p");
+
+        customer.textContent =
+          `Cliente: ${order.nombre || ""}\n` +
+          `Correo: ${order.email || ""}\n` +
+          `Teléfono: ${order.telefono || ""}`;
+
+        card.appendChild(customer);
+
+
+        // DIRECCIÓN
+
+        const address = document.createElement("p");
+
+        address.textContent =
+          `Dirección: ${order.direccion || ""}\n` +
+          `Comuna: ${order.comuna || ""}\n` +
+          `Región: ${order.region || ""}\n` +
+          `Información adicional: ${order.adicional || "Ninguna"}`;
+
+        card.appendChild(address);
+
+
+        // PRODUCTOS
+
+        const productsTitle = document.createElement("p");
+
+        productsTitle.textContent = "Productos solicitados:";
+
+        card.appendChild(productsTitle);
+
+        const products = document.createElement("pre");
+
+        products.textContent =
+          showProducts(order.productos);
+
+        card.appendChild(products);
+
+
+        // TOTAL
+
+        const total = document.createElement("p");
+
+        total.className = "total";
+
+        total.textContent =
+          "Total: $" + formatPrice(order.total);
+
+        card.appendChild(total);
+
+
+        // ESTADO DEL PEDIDO
+
+        const label = document.createElement("label");
+
+        label.className = "status-label";
+
+        label.textContent = "Estado del pedido:";
+
+        card.appendChild(label);
+
+
+        const select = document.createElement("select");
+
+        const states = [
+          "Pendiente",
+          "Preparando",
+          "Enviado",
+          "Entregado",
+          "Cancelado"
+        ];
+
+
+        states.forEach(state => {
+
+          const option = document.createElement("option");
+
+          option.value = state;
+
+          option.textContent = state;
+
+          select.appendChild(option);
+
+        });
+
+
+        if (states.includes(order.estado)) {
+
+          select.value = order.estado;
+
+        } else {
+
+          select.value = "Pendiente";
+
+        }
+
+
+        // ACTUALIZAR ESTADO
+
+        select.addEventListener("change", async () => {
+
+          const previousState = order.estado;
+
+          const newState = select.value;
+
+          select.disabled = true;
+
+          const { error: updateError } =
+            await supabaseClient
+              .from("Orders")
+              .update({ estado: newState })
+              .eq("id", order.id);
+
+          if (updateError) {
+
+            console.error(updateError);
+
+            alert(
+              "No se pudo actualizar el pedido: " +
+              updateError.message
+            );
+
+            select.value = previousState || "Pendiente";
+
+          } else {
+
+            order.estado = newState;
+
+            alert("¡Pedido actualizado correctamente! ♡");
+
+          }
+
+          select.disabled = false;
+
+        });
+
+
+        card.appendChild(select);
+
+        container.appendChild(card);
+
+      });
+
+    } catch (error) {
+
+      console.error("Error al cargar pedidos:", error);
+
+      status.textContent =
+        "No se pudieron cargar los pedidos: " + error.message;
+
+    }
+
+  }
+
+
+  // INICIAR PÁGINA
+
+  async function init() {
+
+    try {
+
+      const authorized = await checkAccess();
+
+      if (authorized) {
+        await loadOrders();
+      }
+
+    } catch (error) {
+
+      console.error(error);
+
+      document.getElementById("status").textContent =
+        "Error al iniciar: " + error.message;
+
+    }
+
+  }
+
+  init();
+
+</script>
+
+</body>
+</html>
