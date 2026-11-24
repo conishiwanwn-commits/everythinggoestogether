@@ -121,17 +121,16 @@
     }
 
     .delete-order {
-  display: block;
-  margin-top: 15px;
-  background: white;
-  color: #a9637b;
-  border: 1px solid #d99caf;
-}
+      display: block;
+      margin-top: 15px;
+      background: white;
+      color: #a9637b;
+      border: 1px solid #d99caf;
+    }
 
-/* Ocultar el botón cuando el pedido no está entregado */
-.delete-order[hidden] {
-  display: none;
-}
+    .delete-order[hidden] {
+      display: none;
+    }
 
     @media (max-width: 600px) {
       body {
@@ -266,12 +265,12 @@
   }
 
 
-  // ELIMINAR PEDIDO ENTREGADO
+  // ELIMINAR PEDIDO ENTREGADO O CANCELADO
 
   async function deleteOrder(order, button) {
 
-    if (order.estado !== "Entregado") {
-      alert("Solo puedes eliminar pedidos entregados. ♡");
+    if (!["Entregado", "Cancelado"].includes(order.estado)) {
+      alert("Solo puedes eliminar pedidos entregados o cancelados. ♡");
       return;
     }
 
@@ -290,7 +289,7 @@
         .from("Orders")
         .delete()
         .eq("id", order.id)
-        .eq("estado", "Entregado");
+        .in("estado", ["Entregado", "Cancelado"]);
 
       if (error) {
         throw error;
@@ -480,7 +479,9 @@
 
         deleteButton.className = "delete-order";
         deleteButton.textContent = "Eliminar pedido ♡";
-        deleteButton.hidden = order.estado !== "Entregado";
+
+        deleteButton.hidden =
+          !["Entregado", "Cancelado"].includes(order.estado);
 
         deleteButton.addEventListener("click", () => {
           deleteOrder(order, deleteButton);
@@ -511,7 +512,8 @@
 
             order.estado = newState;
 
-            deleteButton.hidden = newState !== "Entregado";
+            deleteButton.hidden =
+              !["Entregado", "Cancelado"].includes(newState);
 
             if (newState === "Cancelado") {
 
