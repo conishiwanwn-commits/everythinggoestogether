@@ -60,6 +60,11 @@
       opacity: 0.85;
     }
 
+    button:disabled {
+      opacity: 0.6;
+      cursor: not-allowed;
+    }
+
     .back {
       background: transparent;
       color: #a9637b;
@@ -73,6 +78,7 @@
     .order-card p {
       line-height: 1.6;
       overflow-wrap: anywhere;
+      white-space: pre-line;
     }
 
     .order-card pre {
@@ -113,6 +119,19 @@
       font-weight: bold;
       color: #a9637b;
     }
+
+    .delete-order {
+  display: block;
+  margin-top: 15px;
+  background: white;
+  color: #a9637b;
+  border: 1px solid #d99caf;
+}
+
+/* Ocultar el botón cuando el pedido no está entregado */
+.delete-order[hidden] {
+  display: none;
+}
 
     @media (max-width: 600px) {
       body {
@@ -195,9 +214,7 @@
   // FORMATEAR PRECIOS
 
   function formatPrice(price) {
-
     return Number(price || 0).toLocaleString("es-CL");
-
   }
 
 
@@ -246,7 +263,54 @@
     }
 
     return String(products || "Sin información de productos");
+  }
 
+
+  // ELIMINAR PEDIDO ENTREGADO
+
+  async function deleteOrder(order, button) {
+
+    if (order.estado !== "Entregado") {
+      alert("Solo puedes eliminar pedidos entregados. ♡");
+      return;
+    }
+
+    const confirmDelete = confirm(
+      `¿Seguro que quieres eliminar el pedido #${order.id}? Esta acción no se puede deshacer.`
+    );
+
+    if (!confirmDelete) return;
+
+    button.disabled = true;
+    button.textContent = "Eliminando...";
+
+    try {
+
+      const { error } = await supabaseClient
+        .from("Orders")
+        .delete()
+        .eq("id", order.id)
+        .eq("estado", "Entregado");
+
+      if (error) {
+        throw error;
+      }
+
+      alert("Pedido eliminado correctamente ♡");
+
+      await loadOrders();
+
+    } catch (error) {
+
+      console.error("Error al eliminar pedido:", error);
+
+      alert(
+        "No se pudo eliminar el pedido: " + error.message
+      );
+
+      button.disabled = false;
+      button.textContent = "Eliminar pedido ♡";
+    }
   }
 
 
@@ -392,29 +456,35 @@
           "Cancelado"
         ];
 
-
         states.forEach(state => {
 
           const option = document.createElement("option");
 
           option.value = state;
-
           option.textContent = state;
 
           select.appendChild(option);
 
         });
 
-
         if (states.includes(order.estado)) {
-
           select.value = order.estado;
-
         } else {
-
           select.value = "Pendiente";
-
         }
+
+
+        // BOTÓN ELIMINAR
+
+        const deleteButton = document.createElement("button");
+
+        deleteButton.className = "delete-order";
+        deleteButton.textContent = "Eliminar pedido ♡";
+        deleteButton.hidden = order.estado !== "Entregado";
+
+        deleteButton.addEventListener("click", () => {
+          deleteOrder(order, deleteButton);
+        });
 
 
         // ACTUALIZAR ESTADO
@@ -422,42 +492,60 @@
         select.addEventListener("change", async () => {
 
           const previousState = order.estado;
-
           const newState = select.value;
 
           select.disabled = true;
+          deleteButton.disabled = true;
 
-          const { error: updateError } =
-            await supabaseClient
-              .from("Orders")
-              .update({ estado: newState })
-              .eq("id", order.id);
+          try {
 
-          if (updateError) {
+            const { error: updateError } =
+              await supabaseClient
+                .from("Orders")
+                .update({ estado: newState })
+                .eq("id", order.id);
 
-            console.error(updateError);
+            if (updateError) {
+              throw updateError;
+            }
+
+            order.estado = newState;
+
+            deleteButton.hidden = newState !== "Entregado";
+
+            if (newState === "Cancelado") {
+
+              alert(
+                "Pedido cancelado. Supabase ha procesado la devolución de las prendas. ♡"
+              );
+
+            } else {
+
+              alert("¡Pedido actualizado correctamente! ♡");
+
+            }
+
+          } catch (error) {
+
+            console.error("Error al actualizar pedido:", error);
 
             alert(
-              "No se pudo actualizar el pedido: " +
-              updateError.message
+              "No se pudo actualizar el pedido: " + error.message
             );
 
             select.value = previousState || "Pendiente";
 
-          } else {
+          } finally {
 
-            order.estado = newState;
-
-            alert("¡Pedido actualizado correctamente! ♡");
+            select.disabled = false;
+            deleteButton.disabled = false;
 
           }
 
-          select.disabled = false;
-
         });
 
-
         card.appendChild(select);
+        card.appendChild(deleteButton);
 
         container.appendChild(card);
 
@@ -471,7 +559,6 @@
         "No se pudieron cargar los pedidos: " + error.message;
 
     }
-
   }
 
 
@@ -495,7 +582,6 @@
         "Error al iniciar: " + error.message;
 
     }
-
   }
 
   init();
