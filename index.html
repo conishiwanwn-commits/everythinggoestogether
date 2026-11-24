@@ -402,7 +402,7 @@
       <a href="#tienda">Tienda</a>
       <a href="#nosotros">Nuestra historia</a>
       <a href="#contacto">Contacto</a>
-      <a href="#tienda">
+      <a href="#" id="open-cart">
         Bolsa (<span class="cart-count" id="cart-count">0</span>)
       </a>
     </nav>
@@ -679,6 +679,12 @@
       });
     }
 
+    // Abrir bolsa desde el menú sin desplazarse a la colección
+    document.getElementById("open-cart").addEventListener("click", (event) => {
+      event.preventDefault();
+      openCart();
+    });
+
     // Cerrar bolsa
     document.getElementById("close-cart").addEventListener(
       "click", closeCart
@@ -776,15 +782,16 @@
       alert("¡Tu pedido fue recibido correctamente! ♡");
 
       checkoutForm.reset();
-cartItems = [];
-renderCart();
+      cartItems = [];
+      renderCart();
 
-checkoutOverlay.classList.remove("active");
-cartMessage.textContent = "¡Gracias por tu pedido! ♡";
+      checkoutOverlay.classList.remove("active");
+      cartMessage.textContent = "¡Gracias por tu pedido! ♡";
 
-// Actualizar productos inmediatamente
-await loadProducts();
-});
+      // Actualizar productos inmediatamente
+      await loadProducts();
+    });
+
     document.getElementById("year").textContent =
       new Date().getFullYear();
 
