@@ -246,7 +246,6 @@
 
     .cart-overlay.active { display: block; }
 
-    /* CESTA */
     .cart-drawer {
       position: fixed;
       top: 0;
@@ -271,11 +270,8 @@
       align-items: center;
     }
 
-    .cart-header {
-      flex-shrink: 0;
-    }
+    .cart-header { flex-shrink: 0; }
 
-    /* Zona desplazable de los productos */
     .cart-items {
       flex: 1;
       min-height: 0;
@@ -287,16 +283,11 @@
       scrollbar-color: var(--pink-deep) var(--pink);
     }
 
-    /* Barra para Chrome y Edge */
-    .cart-items::-webkit-scrollbar {
-      width: 7px;
-    }
-
+    .cart-items::-webkit-scrollbar { width: 7px; }
     .cart-items::-webkit-scrollbar-track {
       background: var(--pink);
       border-radius: 10px;
     }
-
     .cart-items::-webkit-scrollbar-thumb {
       background: var(--pink-deep);
       border-radius: 10px;
@@ -308,7 +299,6 @@
       gap: 10px;
     }
 
-    /* El total y el botón permanecen abajo */
     .cart-footer {
       flex-shrink: 0;
       border-top: 1px solid var(--line);
@@ -316,7 +306,6 @@
       margin-top: 10px;
     }
 
-    /* FORMULARIO DE COMPRA */
     .checkout-overlay {
       display: none;
       position: fixed;
@@ -562,7 +551,7 @@
         </div>
 
         <button type="submit" class="checkout-button">
-          Enviar mi pedido ♡
+          Pagar con Mercado Pago ♡
         </button>
       </form>
     </div>
@@ -778,7 +767,7 @@
       }
     });
 
-    // Enviar pedido
+    // Crear pago con Mercado Pago
     checkoutForm.addEventListener("submit", async (event) => {
       event.preventDefault();
 
@@ -787,12 +776,11 @@
         return;
       }
 
-      const formData = new FormData(checkoutForm);
+      if (!checkoutForm.reportValidity()) {
+        return;
+      }
 
-      const total = cartItems.reduce(
-        (sum, item) => sum + item.price * item.quantity,
-        0
-      );
+      const formData = new FormData(checkoutForm);
 
       const pedido = {
         nombre: formData.get("nombre"),
@@ -802,8 +790,11 @@
         comuna: formData.get("comuna"),
         direccion: formData.get("direccion"),
         adicional: formData.get("adicional"),
-        productos: cartItems,
-        total: total
+
+        productos: cartItems.map(item => ({
+          id: item.id,
+          quantity: item.quantity
+        }))
       };
 
       const submitButton = checkoutForm.querySelector(
@@ -811,37 +802,53 @@
       );
 
       submitButton.disabled = true;
-      submitButton.textContent = "Enviando tu pedido... ♡";
+      submitButton.textContent = "Preparando tu pago... ♡";
 
-      const { error } = await supabaseClient
-        .from("Orders")
-        .insert([pedido]);
+      try {
+        const { data, error } =
+          await supabaseClient.functions.invoke(
+            "crear-pago",
+            {
+              body: pedido
+            }
+          );
 
-      submitButton.disabled = false;
-      submitButton.textContent = "Enviar mi pedido ♡";
+        if (error) {
+          console.error("Error al crear el pago:", error);
+          throw new Error(
+            data?.error ||
+            "No pudimos conectar con Mercado Pago. Inténtalo nuevamente."
+          );
+        }
 
-      if (error) {
-        console.error("Error al guardar el pedido:", error);
-        alert("No pudimos guardar tu pedido: " + error.message);
-        return;
+        if (!data || !data.init_point) {
+          throw new Error(
+            data?.error || "No recibimos el enlace de pago."
+          );
+        }
+
+        // Abrir el pago de Mercado Pago
+        window.location.href = data.init_point;
+
+      } catch (error) {
+        console.error("Error:", error);
+
+        alert(
+          error instanceof Error
+            ? error.message
+            : "Ocurrió un error al preparar tu pago."
+        );
+
+        submitButton.disabled = false;
+        submitButton.textContent = "Pagar con Mercado Pago ♡";
       }
-
-      alert("¡Tu pedido fue recibido correctamente! ♡");
-
-      checkoutForm.reset();
-      cartItems = [];
-      renderCart();
-
-      checkoutOverlay.classList.remove("active");
-      cartMessage.textContent = "¡Gracias por tu pedido! ♡";
-
-      // Actualizar productos inmediatamente
-      await loadProducts();
     });
 
+    // Año del pie de página
     document.getElementById("year").textContent =
       new Date().getFullYear();
 
+    // Comprobar conexión con Supabase
     async function testSupabaseConnection() {
       const { error } = await supabaseClient
         .from("Products")
